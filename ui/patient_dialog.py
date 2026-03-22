@@ -23,6 +23,7 @@ class ParsePreviewWidget(QScrollArea):
             ("dx_others", "Dx (others)"),
             ("date_onset", "Date Onset"),
             ("date_dx", "Date Dx"),
+            ("date_entry", "Date Entry"),
         ],
         "임상 소견": [
             ("onset_bctl", "Onset Region"),

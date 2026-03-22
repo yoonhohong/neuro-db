@@ -16,7 +16,7 @@ TEMPLATE = """\
 Patient_name:
 Hosp_ID:
 
-Remarks:
+Remarks: dx at entry (within 1 mo) / referred from [병원명], dx established before entry / dx at this institution after [N]mo follow-up 
 
 Sex : M   F
 Age (at Dx) :
@@ -24,14 +24,15 @@ Age (at Dx) :
 Dx : ALS   PLS   BSMA   HSP   Others
 Dx_others (specify) :
 Date_onset : YYYY-MM
+Date_entry : YYYY-MM
 Date_Dx : YYYY-MM
 
 Onset_region : BCTL
 LMN (clinical at entry): BCTL   None
 UMN (clinical at entry): BCTL   None
 EMG (at entry): BCTL   None   NotChecked
-Pseudobulbar affect: Y   N   Indeterminate
-Dementia: Y   N   Indeterminate
+Pseudobulbar affect (at entry): Y   N   Indeterminate
+Dementia (at entry): Y   N   Indeterminate
 
 Riluzole: YYYY-MM (start)   YYYY-MM (end)
 Edaravone: YYYY-MM (start)   YYYY-MM (end)
@@ -142,6 +143,7 @@ def parse_template(text: str) -> dict:
 
     result["date_onset"] = _parse_date_field(_line(text, r"Date_onset"))
     result["date_dx"] = _parse_date_field(_line(text, r"Date_Dx"))
+    result["date_entry"] = _parse_date_field(_line(text, r"Date_entry"))
 
     # --- 임상 소견 ---
     onset = _parse_bctl(_line(text, r"Onset_region"))
@@ -354,6 +356,7 @@ def format_patient_as_template(p: dict) -> str:
         f"Dx : {v('dx', 'ALS   PLS   BSMA   HSP   Others')}",
         f"Dx_others (specify) : {v('dx_others')}",
         f"Date_onset : {date_or('date_onset')}",
+        f"Date_entry : {date_or('date_entry')}",
         f"Date_Dx : {date_or('date_dx')}",
         "",
         f"Onset_region : {onset_s}",

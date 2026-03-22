@@ -40,6 +40,7 @@ def init_db():
                 dx_others       TEXT,
                 date_onset      TEXT,
                 date_dx         TEXT,
+                date_entry      TEXT,
                 onset_b         INTEGER DEFAULT 0,
                 onset_c         INTEGER DEFAULT 0,
                 onset_t         INTEGER DEFAULT 0,
@@ -110,6 +111,10 @@ def init_db():
                 date        TEXT
             );
         """)
+        # 기존 DB 마이그레이션: date_entry 컬럼이 없으면 추가
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(patients)")]
+        if "date_entry" not in cols:
+            conn.execute("ALTER TABLE patients ADD COLUMN date_entry TEXT")
 
 
 def _now() -> str:
@@ -141,7 +146,7 @@ def _insert_timeseries(conn, patient_id: int, parsed: dict):
 
 PATIENT_FIELDS = [
     "patient_name", "hosp_id", "remarks", "sex", "age_at_dx",
-    "dx", "dx_others", "date_onset", "date_dx",
+    "dx", "dx_others", "date_onset", "date_dx", "date_entry",
     "onset_b", "onset_c", "onset_t", "onset_l",
     "lmn_b", "lmn_c", "lmn_t", "lmn_l", "lmn_none",
     "umn_b", "umn_c", "umn_t", "umn_l", "umn_none",
