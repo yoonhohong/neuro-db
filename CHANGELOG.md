@@ -16,6 +16,7 @@
 ### 수정 (버그)
 - 환자 목록에서 Bwt/FVC/ALSFRS-R(latest) 컬럼 정렬 시, 해당 값이 없는 환자가 섞여 있으면 앱이 종료되던 문제 수정
 - CSV 내보내기: 검색 필터 결과가 0건일 때 필터를 무시하고 전체 환자를 내보내던 문제 수정 (이제 내보낸 환자 수를 안내 메시지로 표시)
+- Windows 빌드: conda/miniconda 기반 Python으로 빌드할 경우 sqlite3.dll이 실행 파일에 누락되어 앱이 아예 실행되지 않던 문제 수정 (`ImportError: DLL load failed while importing _sqlite3`)
 
 ### 참고
 - DB 스키마 변경 없음 (기존 데이터 그대로 호환)

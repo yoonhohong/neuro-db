@@ -5,13 +5,28 @@
 # Windows: pyinstaller build.spec  →  dist/ALS Research Database.exe
 #
 import sys
+import os
 
 block_cipher = None
+
+# Windows: conda/miniconda 배포판은 sqlite3.dll이 표준 DLLs 폴더가 아니라
+# Library\bin에 있어 PyInstaller가 자동으로 찾지 못하고 누락시키는 경우가 있다
+# (실행 시 "ImportError: DLL load failed while importing _sqlite3"로 나타남).
+# 있으면 명시적으로 바이너리에 포함시킨다.
+binaries = []
+if sys.platform == 'win32':
+    for candidate in (
+        os.path.join(sys.base_prefix, 'Library', 'bin', 'sqlite3.dll'),
+        os.path.join(sys.base_prefix, 'DLLs', 'sqlite3.dll'),
+    ):
+        if os.path.exists(candidate):
+            binaries.append((candidate, '.'))
+            break
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
+    binaries=binaries,
     datas=[],
     hiddenimports=[
         'PySide6.QtCore',
