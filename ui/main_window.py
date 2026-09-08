@@ -95,7 +95,7 @@ class MainWindow(QMainWindow):
         self.table.setColumnCount(len(COL_HEADERS))
         self.table.setHorizontalHeaderLabels(COL_HEADERS)
         hdr = self.table.horizontalHeader()
-        hdr.setFont(QFont("Arial", 13, QFont.Bold))
+        hdr.setFont(QFont("Arial", 15, QFont.Bold))
         # Patient Name: 남은 공간 모두 차지
         hdr.setSectionResizeMode(0, QHeaderView.Stretch)
         # 나머지: 고정 너비
@@ -118,7 +118,7 @@ class MainWindow(QMainWindow):
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
         self.table.setSortingEnabled(False)  # 수동 정렬 사용
-        self.table.setFont(QFont("Arial", 12))
+        self.table.setFont(QFont("Arial", 14))
         self.table.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
         self.table.cellDoubleClicked.connect(self._edit_patient)
         layout.addWidget(self.table)

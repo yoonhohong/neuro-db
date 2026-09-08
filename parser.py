@@ -82,13 +82,99 @@ def _parse_bctl(value: str | None) -> dict:
     }
 
 
+BCTL_B_ALIASES = {"b", "bulbar"}
+BCTL_C_ALIASES = {"c", "cervical"}
+BCTL_T_ALIASES = {"t", "thoracic", "respiratory"}
+BCTL_L_ALIASES = {"l", "lumbosacral", "lumbar"}
+
+NONE_ALIASES = {"none", "no"}
+NOT_CHECKED_ALIASES = {"not checked", "notchecked", "nc"}
+
+YES_ALIASES = {"yes", "y", "present"}
+NO_ALIASES = {"no", "n", "absent"}
+INDETERMINATE_ALIASES = {"indeterminate", "unknown", "uk", "not determined"}
+
+
+def _parse_onset_region(value: str | None) -> dict:
+    """B/C/T/L 문자 조합(예: 'BL') 또는 Bulbar/Cervical/Thoracic/Respiratory/
+    Lumbosacral/Lumbar 등 단어(대소문자 무관)를 모두 인식."""
+    flags = {"b": 0, "c": 0, "t": 0, "l": 0}
+    if not value:
+        return flags
+    v = value.strip()
+
+    # 순수 BCTL 문자 조합 (예: "BL", "bctl")
+    if re.fullmatch(r"[BCTLbctl]+", v):
+        upper = v.upper()
+        flags["b"] = 1 if "B" in upper else 0
+        flags["c"] = 1 if "C" in upper else 0
+        flags["t"] = 1 if "T" in upper else 0
+        flags["l"] = 1 if "L" in upper else 0
+        return flags
+
+    for token in re.split(r"[,\s/;+]+", v):
+        t = token.strip().lower()
+        if t in BCTL_B_ALIASES:
+            flags["b"] = 1
+        elif t in BCTL_C_ALIASES:
+            flags["c"] = 1
+        elif t in BCTL_T_ALIASES:
+            flags["t"] = 1
+        elif t in BCTL_L_ALIASES:
+            flags["l"] = 1
+    return flags
+
+
+def _parse_clinical_bctl(value: str | None, allow_not_checked: bool = False) -> dict:
+    """LMN/UMN/EMG 공용: BCTL 문자·단어 별칭에 더해 None 상태 별칭까지 인식한다
+    (대소문자 무관).
+    - None: None, none, no, No
+    - Not checked(EMG만): Not checked, not checked, NC, nc
+    """
+    flags = {"b": 0, "c": 0, "t": 0, "l": 0, "none": 0}
+    if allow_not_checked:
+        flags["not_checked"] = 0
+    if not value:
+        return flags
+    v = value.strip()
+    v_norm = re.sub(r"\s+", " ", v.lower())
+
+    if v_norm in NONE_ALIASES:
+        flags["none"] = 1
+        return flags
+    if allow_not_checked and v_norm in NOT_CHECKED_ALIASES:
+        flags["not_checked"] = 1
+        return flags
+
+    # 순수 BCTL 문자 조합 (예: "BL", "bctl")
+    if re.fullmatch(r"[BCTLbctl]+", v):
+        upper = v.upper()
+        flags["b"] = 1 if "B" in upper else 0
+        flags["c"] = 1 if "C" in upper else 0
+        flags["t"] = 1 if "T" in upper else 0
+        flags["l"] = 1 if "L" in upper else 0
+        return flags
+
+    for token in re.split(r"[,\s/;+]+", v):
+        t = token.strip().lower()
+        if t in BCTL_B_ALIASES:
+            flags["b"] = 1
+        elif t in BCTL_C_ALIASES:
+            flags["c"] = 1
+        elif t in BCTL_T_ALIASES:
+            flags["t"] = 1
+        elif t in BCTL_L_ALIASES:
+            flags["l"] = 1
+    return flags
+
+
 def _parse_timeseries_float(line: str | None) -> list[dict]:
-    """값 (YYYY-MM) 패턴을 모두 추출."""
+    """값 (YYYY-MM) 패턴을 모두 추출. 값 뒤에 kg/%같은 단위가 붙어도 무시한다."""
     if not line:
         return []
     return [
         {"value": float(m.group(1)), "date": m.group(2)}
-        for m in re.finditer(r"(\d+(?:\.\d+)?)\s*\((\d{4}-\d{2})\)", line)
+        for m in re.finditer(r"(\d+(?:\.\d+)?)\s*[a-zA-Z%]*\s*\((\d{4}-\d{2})\)", line)
     ]
 
 
@@ -126,19 +212,25 @@ def parse_template(text: str) -> dict:
     result["remarks"] = _line(text, r"Remarks") or ""
 
     sex_val = _line(text, r"Sex")
-    result["sex"] = "M" if sex_val and re.search(r"\bM\b", sex_val) and not re.search(r"\bF\b", sex_val) else (
-        "F" if sex_val and re.search(r"\bF\b", sex_val) and not re.search(r"\bM\b", sex_val) else (
-            sex_val.strip() if sex_val else ""
+    MALE_ALIASES = {"male", "m", "남자", "남", "남성"}
+    FEMALE_ALIASES = {"female", "f", "여자", "여", "여성"}
+    if sex_val and sex_val.strip().lower() in MALE_ALIASES:
+        result["sex"] = "M"
+    elif sex_val and sex_val.strip().lower() in FEMALE_ALIASES:
+        result["sex"] = "F"
+    else:
+        result["sex"] = "M" if sex_val and re.search(r"\bM\b", sex_val) and not re.search(r"\bF\b", sex_val) else (
+            "F" if sex_val and re.search(r"\bF\b", sex_val) and not re.search(r"\bM\b", sex_val) else (
+                sex_val.strip() if sex_val else ""
+            )
         )
-    )
 
     age_val = _line(text, r"Age\s*\(at\s*Dx\)")
     result["age_at_dx"] = int(age_val) if age_val and age_val.isdigit() else None
 
     # --- 진단 ---
     dx_val = _line(text, r"Dx")
-    dx_options = ["ALS", "PLS", "BSMA", "HSP", "Others"]
-    result["dx"] = next((opt for opt in dx_options if dx_val and re.search(rf"\b{opt}\b", dx_val, re.IGNORECASE)), "")
+    result["dx"] = dx_val.strip() if dx_val else ""
     result["dx_others"] = _line(text, r"Dx_others\s*\(specify\)") or ""
 
     result["date_onset"] = _parse_date_field(_line(text, r"Date_onset"))
@@ -146,20 +238,20 @@ def parse_template(text: str) -> dict:
     result["date_entry"] = _parse_date_field(_line(text, r"Date_entry"))
 
     # --- 임상 소견 ---
-    onset = _parse_bctl(_line(text, r"Onset_region"))
+    onset = _parse_onset_region(_line(text, r"Onset_region"))
     result["onset_b"] = onset["b"]
     result["onset_c"] = onset["c"]
     result["onset_t"] = onset["t"]
     result["onset_l"] = onset["l"]
 
-    lmn = _parse_bctl(_line(text, r"LMN\s*\(clinical at entry\)"))
+    lmn = _parse_clinical_bctl(_line(text, r"LMN\s*\(clinical at entry\)"))
     result["lmn_b"] = lmn["b"]
     result["lmn_c"] = lmn["c"]
     result["lmn_t"] = lmn["t"]
     result["lmn_l"] = lmn["l"]
     result["lmn_none"] = lmn["none"]
 
-    umn = _parse_bctl(_line(text, r"UMN\s*\(clinical at entry\)"))
+    umn = _parse_clinical_bctl(_line(text, r"UMN\s*\(clinical at entry\)"))
     result["umn_b"] = umn["b"]
     result["umn_c"] = umn["c"]
     result["umn_t"] = umn["t"]
@@ -167,28 +259,26 @@ def parse_template(text: str) -> dict:
     result["umn_none"] = umn["none"]
 
     emg_val = _line(text, r"EMG\s*\(at entry\)")
-    emg = _parse_bctl(emg_val)
+    emg = _parse_clinical_bctl(emg_val, allow_not_checked=True)
     result["emg_b"] = emg["b"]
     result["emg_c"] = emg["c"]
     result["emg_t"] = emg["t"]
     result["emg_l"] = emg["l"]
     result["emg_none"] = emg["none"]
-    result["emg_not_checked"] = 1 if emg_val and re.search(r"notchecked", emg_val, re.IGNORECASE) else 0
+    result["emg_not_checked"] = emg["not_checked"]
 
     for field, pattern in [
-        ("pseudobulbar_affect", r"Pseudobulbar affect"),
-        ("dementia", r"Dementia"),
+        ("pseudobulbar_affect", r"Pseudobulbar affect\s*\(at entry\)"),
+        ("dementia", r"Dementia\s*\(at entry\)"),
     ]:
         val = _line(text, pattern)
-        if val:
-            if re.search(r"\bIndeterminate\b", val, re.IGNORECASE):
-                result[field] = "Indeterminate"
-            elif re.search(r"\bY\b", val, re.IGNORECASE):
-                result[field] = "Y"
-            elif re.search(r"\bN\b", val, re.IGNORECASE):
-                result[field] = "N"
-            else:
-                result[field] = ""
+        v_norm = re.sub(r"\s+", " ", val.strip().lower()) if val else ""
+        if v_norm in YES_ALIASES:
+            result[field] = "Y"
+        elif v_norm in NO_ALIASES:
+            result[field] = "N"
+        elif v_norm in INDETERMINATE_ALIASES:
+            result[field] = "Indeterminate"
         else:
             result[field] = ""
 
@@ -211,7 +301,7 @@ def parse_template(text: str) -> dict:
     bwt_line = _line(text, r"Bwt\s*\(kg\)")
     body_weight = []
     if bwt_line:
-        pm = re.search(r"(\d+(?:\.\d+)?)\s*\(premorbid\)", bwt_line, re.IGNORECASE)
+        pm = re.search(r"(\d+(?:\.\d+)?)\s*[a-zA-Z%]*\s*\(premorbid\)", bwt_line, re.IGNORECASE)
         if pm:
             body_weight.append({"weight_kg": float(pm.group(1)), "date": None, "is_premorbid": 1})
         for entry in _parse_timeseries_float(bwt_line):
@@ -266,7 +356,7 @@ def parse_template(text: str) -> dict:
     return result
 
 
-def _bctl_str(b, c, t, l, none=0) -> str:
+def _bctl_str(b, c, t, l, none=0, not_checked=0) -> str:
     parts = []
     if b:
         parts.append("B")
@@ -278,6 +368,8 @@ def _bctl_str(b, c, t, l, none=0) -> str:
         parts.append("L")
     if none:
         parts.append("None")
+    if not_checked:
+        parts.append("NotChecked")
     return "".join(parts) if parts else ""
 
 
@@ -328,18 +420,16 @@ def format_patient_as_template(p: dict) -> str:
         eda = "YYYY-MM (start)   YYYY-MM (end)"
 
     onset_s = _bctl_str(p.get("onset_b"), p.get("onset_c"), p.get("onset_t"), p.get("onset_l")) or "BCTL"
-    lmn_s = _bctl_str(p.get("lmn_b"), p.get("lmn_c"), p.get("lmn_t"), p.get("lmn_l"), p.get("lmn_none")) or "BCTL   None"
-    umn_s = _bctl_str(p.get("umn_b"), p.get("umn_c"), p.get("umn_t"), p.get("umn_l"), p.get("umn_none")) or "BCTL   None"
-
-    emg_parts = []
-    for letter, key in [("B", "emg_b"), ("C", "emg_c"), ("T", "emg_t"), ("L", "emg_l")]:
-        if p.get(key):
-            emg_parts.append(letter)
-    if p.get("emg_none"):
-        emg_parts.append("None")
-    if p.get("emg_not_checked"):
-        emg_parts.append("NotChecked")
-    emg_s = "".join(emg_parts) if emg_parts else "BCTL   None   NotChecked"
+    lmn_s = _bctl_str(
+        p.get("lmn_b"), p.get("lmn_c"), p.get("lmn_t"), p.get("lmn_l"), p.get("lmn_none"),
+    ) or "BCTL   None"
+    umn_s = _bctl_str(
+        p.get("umn_b"), p.get("umn_c"), p.get("umn_t"), p.get("umn_l"), p.get("umn_none"),
+    ) or "BCTL   None"
+    emg_s = _bctl_str(
+        p.get("emg_b"), p.get("emg_c"), p.get("emg_t"), p.get("emg_l"),
+        p.get("emg_none"), p.get("emg_not_checked"),
+    ) or "BCTL   None   NotChecked"
 
     pba = v("pseudobulbar_affect") or "Y   N   Indeterminate"
     dem = v("dementia") or "Y   N   Indeterminate"
@@ -363,8 +453,8 @@ def format_patient_as_template(p: dict) -> str:
         f"LMN (clinical at entry): {lmn_s}",
         f"UMN (clinical at entry): {umn_s}",
         f"EMG (at entry): {emg_s}",
-        f"Pseudobulbar affect: {pba}",
-        f"Dementia: {dem}",
+        f"Pseudobulbar affect (at entry): {pba}",
+        f"Dementia (at entry): {dem}",
         "",
         f"Riluzole: {ril}",
         f"Edaravone: {eda}",

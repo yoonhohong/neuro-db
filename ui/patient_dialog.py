@@ -14,6 +14,9 @@ class ParsePreviewWidget(QScrollArea):
     """파싱 결과를 키-값 목록으로 표시하는 우측 패널."""
 
     SECTION_KEYS = {
+        "Remarks": [
+            ("remarks", "Remarks"),
+        ],
         "기본 정보": [
             ("patient_name", "Patient Name"),
             ("hosp_id", "Hosp ID"),
@@ -22,8 +25,8 @@ class ParsePreviewWidget(QScrollArea):
             ("dx", "Dx"),
             ("dx_others", "Dx (others)"),
             ("date_onset", "Date Onset"),
-            ("date_dx", "Date Dx"),
             ("date_entry", "Date Entry"),
+            ("date_dx", "Date Dx"),
         ],
         "임상 소견": [
             ("onset_bctl", "Onset Region"),
@@ -86,20 +89,19 @@ class ParsePreviewWidget(QScrollArea):
 
     def _bctl_display(self, parsed, prefix):
         parts = []
-        mapping = [("b", "Bulbar"), ("c", "Cervical"), ("t", "Thoracic"), ("l", "Lumbar")]
-        for key, label in mapping:
+        for letter, key in [("B", "b"), ("C", "c"), ("T", "t"), ("L", "l")]:
             if parsed.get(f"{prefix}_{key}"):
-                parts.append(label)
+                parts.append(letter)
         if parsed.get(f"{prefix}_none"):
             parts.append("None")
-        if prefix == "emg" and parsed.get("emg_not_checked"):
+        if parsed.get(f"{prefix}_not_checked"):
             parts.append("NotChecked")
-        return ", ".join(parts) if parts else "-"
+        return "".join(parts) if parts else "-"
 
-    def _timeseries_display(self, records, value_key, unit=""):
+    def _timeseries_display(self, records, value_key):
         if not records:
             return "-"
-        parts = [f"{r[value_key]}{unit} ({r['date']})" for r in records if r.get("date")]
+        parts = [f"{r[value_key]} ({r['date']})" for r in records if r.get("date")]
         bwt_pm = next((r for r in records if r.get("is_premorbid")), None)
         if bwt_pm:
             parts = [f"{bwt_pm['weight_kg']} (premorbid)"] + parts
@@ -138,9 +140,9 @@ class ParsePreviewWidget(QScrollArea):
                 elif key == "emg_bctl":
                     val = self._bctl_display(parsed, "emg")
                 elif key == "body_weight":
-                    val = self._timeseries_display(parsed.get("body_weight", []), "weight_kg", " kg")
+                    val = self._timeseries_display(parsed.get("body_weight", []), "weight_kg")
                 elif key == "fvc_records":
-                    val = self._timeseries_display(parsed.get("fvc_records", []), "fvc_percent", "%")
+                    val = self._timeseries_display(parsed.get("fvc_records", []), "fvc_percent")
                 elif key == "alsfrs_records":
                     val = self._timeseries_display(parsed.get("alsfrs_records", []), "score")
                 else:
@@ -189,7 +191,7 @@ class PatientDialog(QDialog):
         self.patient_id = patient_id
         self._parsed: dict | None = None
 
-        title = "새 환자 입력" if patient_id is None else "환자 편집"
+        title = "새 환자 입력" if patient_id is None else "편집"
         self.setWindowTitle(title)
         self.resize(1100, 750)
 
@@ -207,12 +209,14 @@ class PatientDialog(QDialog):
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
-        editor_lbl = QLabel("텍스트 입력 (템플릿을 채워넣거나 붙여넣기)")
-        editor_lbl.setStyleSheet("color: #555; font-size: 13px; font-weight: bold;")
+        editor_lbl = QLabel("템플릿")
+        editor_lbl.setStyleSheet("color: #555; font-size: 15px; font-weight: bold;")
         left_layout.addWidget(editor_lbl)
 
         self.editor = QTextEdit()
-        self.editor.setFont(QFont("Courier New", 12))
+        editor_font = QFont("Courier New")
+        editor_font.setPixelSize(14)
+        self.editor.setFont(editor_font)
         self.editor.setAcceptRichText(False)
         self.editor.setPlaceholderText("여기에 텍스트를 입력하거나 붙여넣기 하세요...")
         left_layout.addWidget(self.editor)
@@ -232,8 +236,8 @@ class PatientDialog(QDialog):
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
 
-        preview_lbl = QLabel("파싱 결과 미리보기")
-        preview_lbl.setStyleSheet("color: #555; font-size: 13px; font-weight: bold;")
+        preview_lbl = QLabel("파싱 결과")
+        preview_lbl.setStyleSheet("color: #555; font-size: 15px; font-weight: bold;")
         right_layout.addWidget(preview_lbl)
 
         self.preview = ParsePreviewWidget()
