@@ -95,30 +95,31 @@ class MainWindow(QMainWindow):
         self.table.setColumnCount(len(COL_HEADERS))
         self.table.setHorizontalHeaderLabels(COL_HEADERS)
         hdr = self.table.horizontalHeader()
-        hdr.setFont(QFont("Arial", 15, QFont.Bold))
-        # Patient Name: 남은 공간 모두 차지
+        hdr.setFont(QFont("Arial", 13, QFont.Bold))
+        # Patient Name: 나머지 컬럼이 차지하고 남는 공간을 항상 자동으로 채움
+        # (다른 컬럼을 드래그해 조절해도 전체 폭 합계는 항상 화면 폭과 같게 유지됨)
         hdr.setSectionResizeMode(0, QHeaderView.Stretch)
-        # 나머지: 고정 너비
+        # 나머지: 초기 폭 지정, 사용자가 마우스로 드래그해 조절 가능
         fixed_widths = {
             1: 110,   # Hosp ID
             2: 50,    # Sex
             3: 70,    # Dx
-            4: 80,    # Date Dx
+            4: 100,   # Date Dx
             5: 140,   # Bwt (latest)
             6: 130,   # FVC % (latest)
-            7: 140,   # ALSFRS-R (latest)
+            7: 170,   # ALSFRS-R (latest)
             8: 95,    # Created
             9: 95,    # Updated
         }
         for col, width in fixed_widths.items():
-            hdr.setSectionResizeMode(col, QHeaderView.Fixed)
+            hdr.setSectionResizeMode(col, QHeaderView.Interactive)
             self.table.setColumnWidth(col, width)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
         self.table.setSortingEnabled(False)  # 수동 정렬 사용
-        self.table.setFont(QFont("Arial", 14))
+        self.table.setFont(QFont("Arial", 12))
         self.table.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
         self.table.cellDoubleClicked.connect(self._edit_patient)
         layout.addWidget(self.table)
@@ -150,12 +151,12 @@ class MainWindow(QMainWindow):
         # 정렬
         def sort_key(r):
             if COL_KEYS[self._sort_col].startswith("_"):
-                # 시계열 최신값
+                # 시계열 최신값(숫자). None(기록 없음)은 항상 맨 뒤로 보내되
+                # 실제 값끼리는 숫자로 비교되도록 (있음 여부, 값) 튜플을 사용한다.
                 mapping = {"_bwt": "latest_bwt", "_fvc": "latest_fvc", "_alsfrs": "latest_alsfrs"}
-                val = r.get(mapping.get(COL_KEYS[self._sort_col], ""), "")
-            else:
-                val = r.get(COL_KEYS[self._sort_col], "") or ""
-            return val
+                val = r.get(mapping.get(COL_KEYS[self._sort_col], ""))
+                return (0, 0) if val is None else (1, val)
+            return r.get(COL_KEYS[self._sort_col], "") or ""
 
         rows = sorted(rows, key=sort_key, reverse=not self._sort_asc)
 
@@ -251,9 +252,11 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            # 현재 표시된 환자만 내보내기
-            ids = self._displayed_ids if self._displayed_ids else None
-            db.export_to_csv(ids, path)
-            QMessageBox.information(self, "완료", f"저장되었습니다:\n{path}")
+            # 현재 표시된(검색 필터 적용된) 환자만 내보내기
+            count = db.export_to_csv(self._displayed_ids, path)
+            if count == 0:
+                QMessageBox.warning(self, "내보낼 데이터 없음", "내보낼 환자가 없습니다.")
+            else:
+                QMessageBox.information(self, "완료", f"{count}명의 환자 데이터가 저장되었습니다:\n{path}")
         except Exception as e:
             QMessageBox.critical(self, "오류", str(e))

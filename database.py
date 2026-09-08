@@ -262,11 +262,14 @@ def delete_patient(patient_id: int):
         conn.execute("DELETE FROM patients WHERE patient_id=?", (patient_id,))
 
 
-def export_to_csv(patient_ids: list[int] | None, filepath: str):
-    """patient_ids=None 이면 전체 내보내기."""
+def export_to_csv(patient_ids: list[int] | None, filepath: str) -> int:
+    """patient_ids=None 이면 전체 내보내기, 빈 리스트면 아무것도 내보내지 않음.
+    반환값: 내보낸 환자 수."""
     with get_connection() as conn:
         if patient_ids is None:
             rows = conn.execute("SELECT * FROM patients ORDER BY date_dx DESC").fetchall()
+        elif not patient_ids:
+            rows = []
         else:
             placeholders = ",".join("?" * len(patient_ids))
             rows = conn.execute(
@@ -275,7 +278,7 @@ def export_to_csv(patient_ids: list[int] | None, filepath: str):
             ).fetchall()
 
         if not rows:
-            return
+            return 0
 
         base_cols = list(rows[0].keys())
 
@@ -339,3 +342,5 @@ def export_to_csv(patient_ids: list[int] | None, filepath: str):
                     record[f"alsfrs_{i}_date"] = al["date"]
 
                 writer.writerow({c: record.get(c, "") for c in all_cols})
+
+        return len(rows)
